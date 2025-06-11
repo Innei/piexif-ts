@@ -1,5 +1,7 @@
 // "helper" tests.
-const piexif = require('../../dist/piexif');
+// const piexif = require('../../dist/piexif');
+import * as piexif from '../../src/index'
+import { expect, test } from 'vitest'
 
 test('test "degToDmsRational" -- 1', () => {
   const rationalArray = piexif.GPSHelper.degToDmsRational(180.0);

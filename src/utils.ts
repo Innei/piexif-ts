@@ -879,3 +879,78 @@ export const mergeSegments = (
 
   return segments.join('');
 };
+
+export const findExifInHeic = (data: string): string | null => {
+  // Based on https://github.com/exif-heic-js/exif-heic-js/blob/main/exif-heic.js
+  try {
+    const ftypeSize = unpack('>L', data.slice(0, 4))[0];
+    if (data.slice(4, 8) !== 'ftyp') {
+      return null;
+    }
+
+    const metaBoxOffset = ftypeSize;
+    if (data.slice(metaBoxOffset + 4, metaBoxOffset + 8) !== 'meta') {
+      // This is a simplification. A proper parser would scan for the 'meta' box.
+      return null;
+    }
+    const metaBoxSize = unpack(
+      '>L',
+      data.slice(metaBoxOffset, metaBoxOffset + 4),
+    )[0];
+
+    let exifOffset = -1;
+    let ilocOffset = -1;
+
+    // Scan inside meta box for 'Exif' and 'iloc'
+    const scanStart = metaBoxOffset;
+    const scanEnd = metaBoxOffset + metaBoxSize;
+    for (let i = scanStart; i < scanEnd - 4; i++) {
+      if (data.slice(i, i + 4) === 'Exif') {
+        exifOffset = i;
+      } else if (data.slice(i, i + 4) === 'iloc') {
+        ilocOffset = i;
+      }
+      if (exifOffset !== -1 && ilocOffset !== -1) {
+        break;
+      }
+    }
+
+    if (exifOffset === -1 || ilocOffset === -1) {
+      return null;
+    }
+
+    // According to the reference, exifItemIndex is at `exifOffset - 4`.
+    const exifItemIndex = unpack(
+      '>H',
+      data.slice(exifOffset - 4, exifOffset - 2),
+    )[0];
+
+    // Scan through iloc box for the item.
+    // The reference code starts at `ilocOffset + 12` and assumes 16-byte entries.
+    // This is a simplification.
+    const ilocScanStart = ilocOffset + 12;
+    for (let i = ilocScanStart; i < scanEnd; i += 16) {
+      const itemIndex = unpack('>H', data.slice(i, i + 2))[0];
+      if (itemIndex === exifItemIndex) {
+        const exifLocation = unpack('>L', data.slice(i + 8, i + 12))[0];
+        const tiffOffsetInside = unpack(
+          '>L',
+          data.slice(exifLocation, exifLocation + 4),
+        )[0];
+        const tiffDataOffset = exifLocation + 4 + tiffOffsetInside;
+        const tiffData = data.slice(tiffDataOffset);
+
+        if (['\x49\x49', '\x4d\x4d'].indexOf(tiffData.slice(0, 2)) > -1) {
+          return tiffData;
+        } else {
+          return null;
+        }
+      }
+    }
+  } catch (e) {
+    // Return null if any error occurs during parsing
+    return null;
+  }
+
+  return null;
+};

@@ -67,7 +67,7 @@ export const insert = (exifBinary: string, imageBinary: string): string => {
 };
 
 export const load = (binary: string): IExif => {
-  let exifBinary;
+  let exifBinary: string = null;
   if (typeof binary == 'string') {
     if (binary.slice(0, 2) == '\xff\xd8') {
       exifBinary = binary;
@@ -76,6 +76,14 @@ export const load = (binary: string): IExif => {
       binary.slice(0, 22) == 'data:image/jpg;base64,'
     ) {
       exifBinary = _utils.atob(binary.split(',')[1]);
+    } else if (
+      binary.slice(0, 28) == 'data:image/heic;base64,' ||
+      binary.slice(0, 28) == 'data:image/heif;base64,'
+    ) {
+      const heicBinary = _utils.atob(binary.split(',')[1]);
+      exifBinary = _utils.findExifInHeic(heicBinary);
+    } else if (binary.slice(4, 8) == 'ftyp') {
+      exifBinary = _utils.findExifInHeic(binary);
     } else if (binary.slice(0, 4) == 'Exif') {
       exifBinary = binary.slice(6);
     } else {
@@ -86,6 +94,9 @@ export const load = (binary: string): IExif => {
   }
 
   const exifObj: IExif = {};
+  if (!exifBinary) {
+    return exifObj;
+  }
   const exifReader = new _utils.ExifReader(exifBinary);
   if (exifReader.tiftag === null) {
     return exifObj;
